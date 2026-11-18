@@ -1,0 +1,213 @@
+# Cluster parameters
+environment: ""                    # Cluster environment
+clusterName: ""                    # Cluster name
+
+# Tenant parameters
+organizationId: ""                 # Organization ID
+organizationName: ""               # Organization name
+instanceId: ""                     # Instance ID
+instanceName: ""                   # Instance name
+instanceType: ""                   # Instance type
+instanceExpiredAt: ""              # Instance expiration date
+isInternal: false                  # Internal instance (Probe)
+isPaused: false                    # Instance reconciliation paused
+rolloutGroup: ""                   # Rollout group
+
+# Central parameters
+additionalCAs: []                  # Additional CAs
+# pragma: allowlist nextline secret
+centralAdminPasswordEnabled: false # Central admin password enabled
+centralRdsCidrBlock: "10.1.0.0/16" # Central RDS CIDR Block
+centralDbConnectionString: ""      # Central DB Connection String
+centralDbSecretName: ""            # Central DB Secret Name
+centralDbMaxConnections: 0         # Central DB Connection Pool Max Connections
+telemetryStorageEndpoint: ""       # Telemetry Storage Endpoint
+telemetryStorageKey: "DISABLED"    # Telemetry Storage Key
+
+configAsCodeEnabled: false
+continuousProfilingEnabled: false  # Continuous profiling to Pyroscope enabled
+podDisruptionBudgetsEnabled: false # Pod disruption budgets enabled
+addSafeToEvictAnnotation: false    # Add safe-to-evict annotation
+externalDnsEnabled: false          # External DNS enabled
+
+centralGomemlimitPercentage: 90 # GOMEMLIMIT as percentage of memory limit
+centralResources: # Central resources
+  limits:
+    memory: 1000Mi
+  requests:
+    cpu: 10m
+    memory: 1000Mi
+centralTolerations:
+  - key: "node.kubernetes.io/not-ready"
+    operator: "Exists"
+    effect: "NoExecute"
+    tolerationSeconds: 60
+  - key: "node.kubernetes.io/unreachable"
+    operator: "Exists"
+    effect: "NoExecute"
+    tolerationSeconds: 60
+centralNodeSelector: {}
+centralAffinity: {}
+centralPriority: 0
+
+centralDbResources: # Central DB Resources (for e2e, local db)
+  limits:
+    memory: 1Gi
+  requests:
+    cpu: 100m
+    memory: 100Mi
+centralDbTolerations:
+  - key: "node.kubernetes.io/not-ready"
+    operator: "Exists"
+    effect: "NoExecute"
+    tolerationSeconds: 60
+  - key: "node.kubernetes.io/unreachable"
+    operator: "Exists"
+    effect: "NoExecute"
+    tolerationSeconds: 60
+centralDbNodeSelector: {}
+centralDbAffinity: {}
+centralDbPriority: 0
+centralDbVolumeSize: 10Gi # Used when external DB is disabled, i.e. in non-prod environments.
+
+scannerV4Enabled: false # Scanner V4 enabled
+
+scannerV4IndexerGomemlimitPercentage: 90 # GOMEMLIMIT as percentage of memory limit
+scannerV4IndexerResources: # Scanner V4 indexer resources
+  limits:
+    memory: "350Mi"
+    ephemeral-storage: "40Gi"
+  requests:
+    memory: "350Mi"
+    cpu: "50m"
+    ephemeral-storage: "1Gi"
+scannerV4IndexerTolerations:
+  - key: "node.kubernetes.io/not-ready"
+    operator: "Exists"
+    effect: "NoExecute"
+    tolerationSeconds: 60
+  - key: "node.kubernetes.io/unreachable"
+    operator: "Exists"
+    effect: "NoExecute"
+    tolerationSeconds: 60
+scannerV4IndexerNodeSelector: {}
+scannerV4IndexerAffinity: {}
+scannerV4IndexerPriority: 0
+scannerV4IndexerReplicas: 1
+
+scannerV4MatcherGomemlimitPercentage: 90 # GOMEMLIMIT as percentage of memory limit
+scannerV4MatcherResources: # Scanner V4 matcher resources
+  limits:
+    memory: "750Mi"
+  requests:
+    memory: "750Mi"
+    cpu: "50m"
+scannerV4MatcherTolerations:
+  - key: "node.kubernetes.io/not-ready"
+    operator: "Exists"
+    effect: "NoExecute"
+    tolerationSeconds: 60
+  - key: "node.kubernetes.io/unreachable"
+    operator: "Exists"
+    effect: "NoExecute"
+    tolerationSeconds: 60
+scannerV4MatcherNodeSelector: {}
+scannerV4MatcherAffinity: {}
+scannerV4MatcherPriority: 0
+scannerV4MatcherReplicas: 1
+
+scannerV4DbResources: # Scanner V4 db resources
+  limits:
+    memory: "4Gi"
+  requests:
+    cpu: "100m"
+    memory: "4Gi"
+scannerV4DbVolumeSize: "" # empty string uses the default value set by central CRD
+scannerV4DbTolerations:
+  - key: "node.kubernetes.io/not-ready"
+    operator: "Exists"
+    effect: "NoExecute"
+    tolerationSeconds: 60
+  - key: "node.kubernetes.io/unreachable"
+    operator: "Exists"
+    effect: "NoExecute"
+    tolerationSeconds: 60
+scannerV4DbNodeSelector: {}
+scannerV4DbAffinity: {}
+scannerV4DbPriority: 0
+
+# Scanner V4 DB reindex CronJob. Logs in to the scanner-v4 DB with the same
+# credentials as scanner-v4-matcher/indexer (secret scanner-v4-db-password)
+# and reindexes the given indexes with REINDEX ... CONCURRENTLY.
+scannerV4DbReindexJob:
+  enabled: false
+  schedule: "0 6 * * 0"          # Cron schedule (Sundays 06:00 by default)
+  image: ""                      # Image with psql, e.g. the scanner-v4-db postgres image
+  activeDeadlineSeconds: 7200    # Kill the job after 2h
+  indexes:                       # Indexes to reindex, one REINDEX CONCURRENTLY each
+    - manifest_index_unique
+    - package_scanartifact_pkey
+  resources:
+    limits:
+      memory: 256Mi
+    requests:
+      cpu: 50m
+      memory: 128Mi
+
+# Central VPA parameters
+centralVpaEnabled: false     # Central VPA enabled
+centralVpaRecommenders: []  # Central VPA recommenders
+centralVpaUpdatePolicy:     # Central VPA update policy
+  updateMode: "Auto"
+  minReplicas: 1
+centralVpaResourcePolicy:   # Central VPA resource policy
+  containerPolicies:
+    - containerName: "*"
+      minAllowed:
+        cpu: "100m"
+        memory: "250Mi"
+      maxAllowed:
+        cpu: "1.5"
+        memory: "18Gi"
+
+# Environment variable customizations for all the pods managed by Central CR in format:
+# centralCustomizeEnvVars:
+#   - name: ROX_POSTGRES_DEFAULT_PRUNING_TIMEOUT
+#     value: 10m
+centralCustomizeEnvVars: []
+centralHealthcheckEnabled: true
+centralUIHost: ""
+centralUIExposureCertificateSecret: managed-central-reencrypt  # pragma: allowlist secret
+centralDataHost: ""
+
+# Central route parameters
+centralIngressEnabled: true
+centralIngressClassName: openshift-default
+centralIngressManageSecrets: true # pragma: allowlist secret
+routeEnableThrottling: true
+routeConcurrentTcpConnections: 131072
+routeHttpRequestRate: 131072
+routeTcpNewConnectionRate: 131072
+routeTimeout: "10m"
+routeAllowedCidrRanges: [] # A list of CIDR ranges. Empty list means anyone can access the route
+# The blackbox-exporter monitors Central UI health. Thus, its IPs have to be added if whitelist is not empty
+blackboxExporterProbeIps: [] # A list of CIDR ranges.
+
+declarativeConfig:
+  enabled: true
+  auditLogging:
+    enabled: true
+    endpoint: https://audit-logs-aggregator.rhacs-audit-logs.svc:8888
+    skipTLSVerify: false
+  defaultAuthProvider:
+    enabled: true
+    ownerUserId: ""
+    ownerAlternateUserId: ""
+    oidc:
+      issuer: https://sso.redhat.com/auth/realms/redhat-external
+      clientCredentialsSecret: default-auth-provider-client-credentials # pragma: allowlist secret
+  additionalAuthProvider:
+    name: ""
+    groups: []
+    requiredAttributes: []
+    claimMappings: []

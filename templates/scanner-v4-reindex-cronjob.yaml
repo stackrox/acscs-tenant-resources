@@ -1,0 +1,68 @@
+{{- if .Values.scannerV4DbReindexJob.enabled }}
+{{- if not .Values.scannerV4DbReindexJob.image }}
+{{- fail "scannerV4DbReindexJob.image is required when scannerV4DbReindexJob.enabled is true" }}
+{{- end }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: scanner-v4-db-reindex
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "tenant-resources.labels" . | nindent 4 }}
+  annotations: {{- include "tenant-resources.annotations" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.scannerV4DbReindexJob.schedule | quote }}
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 600
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: {{ .Values.scannerV4DbReindexJob.activeDeadlineSeconds }}
+      template:
+        metadata:
+          labels: {{- include "tenant-resources.labels" . | nindent 12 }}
+            app: scanner-v4-db-reindex
+          annotations: {{- include "tenant-resources.annotations" . | nindent 12 }}
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: reindex
+              image: {{ .Values.scannerV4DbReindexJob.image | quote }}
+              command:
+                - /bin/sh
+                - -c
+                - -e
+                - |
+                  {{- range .Values.scannerV4DbReindexJob.indexes }}
+                  psql \
+                    --host=scanner-v4-db.${POD_NAMESPACE}.svc \
+                    --port=5432 \
+                    --username=postgres \
+                    --dbname=postgres \
+                    --sslmode=verify-full \
+                    --sslrootcert=/run/secrets/stackrox.io/certs/ca.pem \
+                    --command='REINDEX INDEX CONCURRENTLY {{ . }};'
+                  {{- end }}
+              env:
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: scanner-v4-db-password # pragma: allowlist secret
+                      key: password
+                - name: POD_NAMESPACE
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.namespace
+              resources: {{ .Values.scannerV4DbReindexJob.resources | toYaml | nindent 16 }}
+              securityContext:
+                runAsNonRoot: true
+                allowPrivilegeEscalation: false
+              volumeMounts:
+                - name: db-certs
+                  mountPath: /run/secrets/stackrox.io/certs
+                  readOnly: true
+          volumes:
+            - name: db-certs
+              secret:
+                secretName: scanner-v4-db-tls # pragma: allowlist secret
+{{- end }}

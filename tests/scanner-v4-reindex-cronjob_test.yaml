@@ -1,0 +1,124 @@
+suite: scanner-v4-reindex-cronjob
+templates:
+  - templates/scanner-v4-reindex-cronjob.yaml
+  - templates/netpol-scannerv4.yaml
+
+tests:
+  - it: should not render when disabled
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: templates/scanner-v4-reindex-cronjob.yaml
+
+  - it: should fail when enabled without an image
+    set:
+      scannerV4DbReindexJob.enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: scannerV4DbReindexJob.image is required when scannerV4DbReindexJob.enabled is true
+        template: templates/scanner-v4-reindex-cronjob.yaml
+
+  - it: should render a CronJob with the configured indexes
+    set:
+      scannerV4DbReindexJob:
+        enabled: true
+        image: quay.io/rhacs-eng/scanner-v4-db:latest
+        schedule: "30 4 * * *"
+    release:
+      namespace: rhacs-test-tenant
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/scanner-v4-reindex-cronjob.yaml
+      - isKind:
+          of: CronJob
+        template: templates/scanner-v4-reindex-cronjob.yaml
+      - equal:
+          path: spec.schedule
+          value: "30 4 * * *"
+        template: templates/scanner-v4-reindex-cronjob.yaml
+      - equal:
+          path: spec.concurrencyPolicy
+          value: Forbid
+        template: templates/scanner-v4-reindex-cronjob.yaml
+      - matchRegex:
+          path: spec.jobTemplate.spec.template.spec.containers[0].command[3]
+          pattern: "REINDEX INDEX CONCURRENTLY manifest_index_unique;"
+        template: templates/scanner-v4-reindex-cronjob.yaml
+      - matchRegex:
+          path: spec.jobTemplate.spec.template.spec.containers[0].command[3]
+          pattern: "REINDEX INDEX CONCURRENTLY package_scanartifact_pkey;"
+        template: templates/scanner-v4-reindex-cronjob.yaml
+      - matchRegex:
+          path: spec.jobTemplate.spec.template.spec.containers[0].command[3]
+          pattern: "--host=scanner-v4-db\\.\\$\\{POD_NAMESPACE\\}\\.svc"
+        template: templates/scanner-v4-reindex-cronjob.yaml
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.name
+          value: scanner-v4-db-password
+        template: templates/scanner-v4-reindex-cronjob.yaml
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.key
+          value: password
+        template: templates/scanner-v4-reindex-cronjob.yaml
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.volumes[0].secret.secretName
+          value: scanner-v4-db-tls
+        template: templates/scanner-v4-reindex-cronjob.yaml
+
+  - it: should render only the configured indexes
+    set:
+      scannerV4DbReindexJob:
+        enabled: true
+        image: quay.io/rhacs-eng/scanner-v4-db:latest
+        indexes:
+          - some_other_index
+    asserts:
+      - matchRegex:
+          path: spec.jobTemplate.spec.template.spec.containers[0].command[3]
+          pattern: "REINDEX INDEX CONCURRENTLY some_other_index;"
+        template: templates/scanner-v4-reindex-cronjob.yaml
+      - notMatchRegex:
+          path: spec.jobTemplate.spec.template.spec.containers[0].command[3]
+          pattern: "manifest_index_unique"
+        template: templates/scanner-v4-reindex-cronjob.yaml
+
+  - it: should render the reindex egress policy when enabled
+    set:
+      scannerV4DbReindexJob:
+        enabled: true
+        image: quay.io/rhacs-eng/scanner-v4-db:latest
+    asserts:
+      - hasDocuments:
+          count: 4
+        template: templates/netpol-scannerv4.yaml
+      - equal:
+          path: spec.podSelector.matchLabels.app
+          value: scanner-v4-db-reindex
+        template: templates/netpol-scannerv4.yaml
+        documentSelector:
+          path: metadata.name
+          value: tenant-scanner-v4-db-reindex
+      - equal:
+          path: spec.egress[0].to[0].podSelector.matchLabels.app
+          value: scanner-v4-db
+        template: templates/netpol-scannerv4.yaml
+        documentSelector:
+          path: metadata.name
+          value: tenant-scanner-v4-db-reindex
+
+  - it: should always allow db ingress from the reindex job
+    asserts:
+      - hasDocuments:
+          count: 3
+        template: templates/netpol-scannerv4.yaml
+      - equal:
+          path: spec.ingress[0].from[0].podSelector.matchExpressions[0].values
+          value:
+            - scanner-v4-indexer
+            - scanner-v4-matcher
+            - scanner-v4-db-reindex
+        template: templates/netpol-scannerv4.yaml
+        documentSelector:
+          path: metadata.name
+          value: tenant-scanner-v4-db

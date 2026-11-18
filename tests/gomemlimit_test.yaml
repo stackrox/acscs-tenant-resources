@@ -1,0 +1,76 @@
+suite: gomemlimit
+templates:
+  - templates/central-cr.yaml
+
+tests:
+
+  # --- Central GOMEMLIMIT ---
+
+  - it: should set central GOMEMLIMIT to 90% of memory limit by default
+    asserts:
+      - matchRegex:
+          path: spec.overlays[0].patches[1].value
+          pattern: 'name: GOMEMLIMIT\nvalue: "943718400"'
+
+  - it: should set central GOMEMLIMIT with custom percentage
+    set:
+      centralGomemlimitPercentage: 80
+    asserts:
+      - matchRegex:
+          path: spec.overlays[0].patches[1].value
+          pattern: 'name: GOMEMLIMIT\nvalue: "838860800"'
+
+  - it: should set central GOMEMLIMIT with custom memory limit
+    set:
+      centralResources.limits.memory: 2Gi
+    asserts:
+      - matchRegex:
+          path: spec.overlays[0].patches[1].value
+          pattern: 'name: GOMEMLIMIT\nvalue: "1932735284"'
+
+  - it: should set central GOMEMLIMIT with custom memory and percentage
+    set:
+      centralResources.limits.memory: 2Gi
+      centralGomemlimitPercentage: 75
+    asserts:
+      - matchRegex:
+          path: spec.overlays[0].patches[1].value
+          pattern: 'name: GOMEMLIMIT\nvalue: "1610612736"'
+
+  # --- Scanner V4 Indexer GOMEMLIMIT ---
+
+  - it: should set scanner-v4-indexer GOMEMLIMIT to 90% of memory limit by default
+    set:
+      scannerV4Enabled: true
+    asserts:
+      - matchRegex:
+          path: spec.overlays[1].patches[1].value
+          pattern: 'name: GOMEMLIMIT\nvalue: "330301440"'
+
+  - it: should set scanner-v4-indexer GOMEMLIMIT with custom percentage
+    set:
+      scannerV4Enabled: true
+      scannerV4IndexerGomemlimitPercentage: 80
+    asserts:
+      - matchRegex:
+          path: spec.overlays[1].patches[1].value
+          pattern: 'name: GOMEMLIMIT\nvalue: "293601280"'
+
+  # --- Scanner V4 Matcher GOMEMLIMIT ---
+
+  - it: should set scanner-v4-matcher GOMEMLIMIT to 90% of memory limit by default
+    set:
+      scannerV4Enabled: true
+    asserts:
+      - matchRegex:
+          path: spec.overlays[2].patches[1].value
+          pattern: 'name: GOMEMLIMIT\nvalue: "707788800"'
+
+  - it: should set scanner-v4-matcher GOMEMLIMIT with custom percentage
+    set:
+      scannerV4Enabled: true
+      scannerV4MatcherGomemlimitPercentage: 80
+    asserts:
+      - matchRegex:
+          path: spec.overlays[2].patches[1].value
+          pattern: 'name: GOMEMLIMIT\nvalue: "629145600"'
