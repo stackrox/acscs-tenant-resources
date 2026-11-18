@@ -1,0 +1,39 @@
+# TODO(ROX-33481): Delete when the issue is fixed in the ACS Operator
+# Duplicate roles and rolebindings defined in the central helm chart in case operator deletes them.
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: use-scc-rox-33465-workaround
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "tenant-resources.labels" . | nindent 4 }}
+  annotations: {{- include "tenant-resources.annotations" . | nindent 4 }}
+rules:
+  - apiGroups:
+      - security.openshift.io
+    resources:
+      - securitycontextconstraints
+    resourceNames:
+      - nonroot-v2
+      - restricted-v2
+    verbs:
+      - use
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: use-scc-rox-33465-workaround
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "tenant-resources.labels" . | nindent 4 }}
+  annotations: {{- include "tenant-resources.annotations" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: use-scc-rox-33465-workaround
+subjects:
+  - kind: ServiceAccount
+    name: central
+    namespace: {{.Release.Namespace}}
+  - kind: ServiceAccount
+    name: scanner-v4
+    namespace: {{ .Release.Namespace }}

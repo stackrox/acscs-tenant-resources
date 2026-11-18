@@ -1,0 +1,58 @@
+{{- if .Values.centralIngressEnabled }}
+{{ if .Values.centralUIHost }}
+---
+kind: Route
+apiVersion: route.openshift.io/v1
+metadata:
+  name: managed-central-reencrypt
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    {{- include "tenant-resources.commonRouteAnnotations" . | nindent 4 }}
+  labels:
+    {{- include "tenant-resources.labels" . | nindent 4 }}
+    rhacs.redhat.com/ingress-shard: public
+    {{- if .Values.externalDnsEnabled }}
+    external-dns.rhacs.redhat.com/enabled: "true"
+    {{- end }}
+spec:
+  host: {{ .Values.centralUIHost }}
+  to:
+    kind: Service
+    name: central
+    weight: 100
+  port:
+    targetPort: https
+  tls:
+    termination: passthrough
+    insecureEdgeTerminationPolicy: Redirect
+  wildcardPolicy: None
+{{ end }}
+{{- if .Values.centralDataHost }}
+---
+kind: Route
+apiVersion: route.openshift.io/v1
+metadata:
+  name: managed-central-passthrough
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    {{- include "tenant-resources.commonRouteAnnotations" . | nindent 4 }}
+  labels:
+    {{- include "tenant-resources.labels" . | nindent 4 }}
+    rhacs.redhat.com/ingress-shard: public
+    {{- if .Values.externalDnsEnabled }}
+    external-dns.rhacs.redhat.com/enabled: "true"
+    {{- end }}
+spec:
+  host: {{ .Values.centralDataHost }}
+  to:
+    kind: Service
+    name: central
+    weight: 100
+  port:
+    targetPort: https
+  tls:
+    termination: passthrough
+    insecureEdgeTerminationPolicy: Redirect
+  wildcardPolicy: None
+{{- end }}
+{{- end }}

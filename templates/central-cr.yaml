@@ -1,0 +1,331 @@
+apiVersion: platform.stackrox.io/v1alpha1
+kind: Central
+metadata:
+  name: central
+  namespace: "{{ .Release.Namespace }}"
+  labels:
+    rhacs.redhat.com/instance-type: "{{ .Values.instanceType }}"
+    rhacs.redhat.com/org-id: "{{ .Values.organizationId }}"
+    rhacs.redhat.com/tenant: "{{ .Values.instanceId }}"
+    rhacs.redhat.com/version-selector: "{{ .Values.rolloutGroup }}"
+  annotations:
+    platform.stackrox.io/managed-services: "true"
+    rhacs.redhat.com/org-name: {{ .Values.organizationName }}
+    {{ if .Values.isPaused }}stackrox.io/pause-reconcile: "true"{{ end }}
+spec:
+  customize:
+    annotations:
+      rhacs.redhat.com/org-name: "{{ .Values.organizationName }}"
+      rhacs.redhat.com/environment: "{{ .Values.environment }}"
+      rhacs.redhat.com/cluster-name: "{{ .Values.clusterName }}"
+      rhacs.redhat.com/expired-at: "{{ .Values.instanceExpiredAt }}"
+      {{- if .Values.addSafeToEvictAnnotation }}
+      cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
+      {{- end }}
+    labels:
+      rhacs.redhat.com/instance-type: "{{ .Values.instanceType}}"
+      rhacs.redhat.com/org-id: "{{ .Values.organizationId }}"
+      rhacs.redhat.com/tenant: "{{ .Values.instanceId }}"
+    {{- with .Values.centralCustomizeEnvVars }}
+    envVars:
+    {{ . | toYaml | nindent 6 }}
+    {{- end }}
+  central:
+    adminPasswordGenerationDisabled: {{ not .Values.centralAdminPasswordEnabled }}
+    {{- with .Values.centralNodeSelector }}
+    nodeSelector:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.centralTolerations }}
+    tolerations:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    db:
+      {{ if .Values.centralDbConnectionString }}
+      connectionString: "{{ .Values.centralDbConnectionString }}"
+      passwordSecret:
+        name: "{{ .Values.centralDbSecretName }}"
+      {{- else }}
+      persistence:
+        persistentVolumeClaim:
+          size: {{ .Values.centralDbVolumeSize }}
+      {{ end }}
+      isEnabled: Enabled
+      resources: {{ .Values.centralDbResources | toYaml | nindent 8 }}
+      {{- with .Values.centralDbNodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.centralDbTolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.centralDbMaxConnections }}
+      connectionPoolSize:
+        maxConnections: {{ .Values.centralDbMaxConnections }}
+      {{- end }}
+
+    declarativeConfiguration:
+      secrets:
+        - name: cloud-service-sensible-declarative-configs
+        - name: cloud-service-manual-declarative-configs
+    exposure:
+      route:
+        # tenant-resources chart exposes passthrough (for Sensor connection) and reencrypt (for Central UI) routes. See ingress.yaml for details.
+        enabled: false
+    defaultTLSSecret:
+      name: {{ .Values.centralUIExposureCertificateSecret }}
+    monitoring:
+      exposeEndpoint: Enabled
+    notifierSecretsEncryption:
+      enabled: true
+    resources: {{ .Values.centralResources | toYaml | nindent 6 }}
+    telemetry:
+      enabled: true
+      storage:
+        endpoint: "{{ .Values.telemetryStorageEndpoint }}"
+        key: "{{ .Values.telemetryStorageKey }}"
+
+  monitoring:
+    openshift:
+      enabled: {{ not .Values.isInternal }}
+
+  network:
+    policies: Disabled
+
+  scannerV4:
+    db:
+      resources: {{ .Values.scannerV4DbResources | toYaml | nindent 8 }}
+      {{- with .Values.scannerV4DbNodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.scannerV4DbTolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.scannerV4DbVolumeSize }}
+      persistence:
+        persistentVolumeClaim:
+          size: {{ . }}
+      {{- end }}
+    indexer:
+      scaling:
+        autoScaling: Disabled
+        replicas: {{ .Values.scannerV4IndexerReplicas }}
+      resources: {{ .Values.scannerV4IndexerResources | toYaml | nindent 8 }}
+      {{- with .Values.scannerV4IndexerNodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.scannerV4IndexerTolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    matcher:
+      scaling:
+        autoScaling: Disabled
+        replicas: {{ .Values.scannerV4MatcherReplicas }}
+      resources: {{ .Values.scannerV4MatcherResources | toYaml | nindent 8 }}
+      {{- with .Values.scannerV4MatcherNodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.scannerV4MatcherTolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    monitoring:
+      exposeEndpoint: Enabled
+    scannerComponent: {{ if .Values.scannerV4Enabled }}Enabled{{ else }}Disabled{{ end }}
+
+  {{- if .Values.additionalCAs }}
+  tls:
+    additionalCAs: {{ .Values.additionalCAs | toYaml | nindent 6 }}
+  {{- end }}
+
+  configAsCode:
+    configAsCodeComponent: {{ if .Values.configAsCodeEnabled }}Enabled{{ else }}Disabled{{ end }}
+
+  overlays:
+
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: central
+      patches:
+
+        # Remove central cpu limits
+        - path: spec.template.spec.containers[name:central].resources.limits.cpu
+          value: null
+
+        # Add GOMEMLIMIT env variable to the central container.
+        # This setting takes precedence over ROX_MEMLIMIT, which by default equals the container limit.
+        - path: spec.template.spec.containers[name:central].env[-1]
+          value: |
+            name: GOMEMLIMIT
+            value: {{ include "tenant-resources.gomemlimit" (dict "memory" .Values.centralResources.limits.memory "percentage" .Values.centralGomemlimitPercentage) | quote }}
+
+        - path: spec.template.spec.containers[name:central].env[-1]
+          value: |
+            name: ROX_CONTINUOUS_PROFILING
+            value: {{ .Values.continuousProfilingEnabled | quote }}
+
+        - path: spec.template.spec.containers[name:central].env[-1]
+          value: |
+            name: ROX_CONTINUOUS_PROFILING_SERVER_ADDRESS
+            value: "http://rhacs-pyroscope-internal.rhacs-observability.svc.cluster.local:4040"
+
+        - path: spec.template.spec.containers[name:central].env[-1]
+          value: |
+            name: ROX_CONTINUOUS_PROFILING_LABELS
+            value: "tenant_id={{ .Values.instanceId }},org_name={{ .Values.organizationName | replace "," "" }},rollout_group={{ .Values.rolloutGroup }}"
+
+        - path: spec.template.spec.containers[name:central].env[-1]
+          value: |
+            name: ROX_CONTINUOUS_PROFILING_APP_NAME
+            value: "central"
+
+        # Set allowPrivilegeEscalation to false for central container.
+        - path: spec.template.spec.containers[name:central].securityContext.allowPrivilegeEscalation
+          value: "false"
+
+        {{- with .Values.centralAffinity }}
+        # Apply custom affinity to central
+        - path: spec.template.spec.affinity
+          value: |{{ . | toYaml | nindent 12 }}
+        {{- end }}
+
+        {{- with .Values.centralPriority }}
+        # Apply custom priority class to central
+        - path: spec.template.spec.priorityClassName
+          value: '"{{$.Release.Namespace}}-central-{{.}}"'
+        {{- end }}
+
+        # TODO(ROX-33481): Delete when the issue is fixed in the ACS Operator
+        - path: spec.template.metadata.annotations.openshift\.io/required-scc
+          value: nonroot-v2
+
+    {{ if .Values.scannerV4Enabled }}
+
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: scanner-v4-indexer
+      patches:
+
+        # Remove scanner-v4-indexer cpu limits
+        - path: spec.template.spec.containers[name:indexer].resources.limits.cpu
+          value: null
+
+        # Add GOMEMLIMIT env variable to the scanner-v4-indexer container.
+        - path: spec.template.spec.containers[name:indexer].env[-1]
+          value: |
+            name: GOMEMLIMIT
+            value: {{ include "tenant-resources.gomemlimit" (dict "memory" .Values.scannerV4IndexerResources.limits.memory "percentage" .Values.scannerV4IndexerGomemlimitPercentage) | quote }}
+
+        # Set allowPrivilegeEscalation to false for scanner-v4-indexer container.
+        - path: spec.template.spec.containers[name:indexer].securityContext.allowPrivilegeEscalation
+          value: "false"
+
+        {{- with .Values.scannerV4IndexerAffinity }}
+        # Apply custom affinity to scanner-v4-indexer
+        - path: spec.template.spec.affinity
+          value: |{{ . | toYaml | nindent 12 }}
+        {{- end }}
+
+
+        {{- with .Values.scannerV4IndexerPriority }}
+        # Apply custom priority class to scanner
+        - path: spec.template.spec.priorityClassName
+          value: '"{{ $.Release.Namespace }}-scanner-v4-indexer-{{ . }}"'
+        {{- end }}
+
+        # TODO(ROX-33481): Delete when the issue is fixed in the ACS Operator
+        - path: spec.template.metadata.annotations.openshift\.io/required-scc
+          value: restricted-v2
+
+
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: scanner-v4-matcher
+      patches:
+
+        # Remove scanner-v4-matcher cpu limits
+        - path: spec.template.spec.containers[name:matcher].resources.limits.cpu
+          value: null
+
+        # Add GOMEMLIMIT env variable to the scanner-v4-matcher container.
+        - path: spec.template.spec.containers[name:matcher].env[-1]
+          value: |
+            name: GOMEMLIMIT
+            value: {{ include "tenant-resources.gomemlimit" (dict "memory" .Values.scannerV4MatcherResources.limits.memory "percentage" .Values.scannerV4MatcherGomemlimitPercentage) | quote }}
+
+        # Set allowPrivilegeEscalation to false for scanner-v4-matcher container.
+        - path: spec.template.spec.containers[name:matcher].securityContext.allowPrivilegeEscalation
+          value: "false"
+
+        - path: spec.template.spec.containers[name:matcher].env[-1]
+          value: |
+            name: ROX_CONTINUOUS_PROFILING
+            value: {{ .Values.continuousProfilingEnabled | quote }}
+
+        - path: spec.template.spec.containers[name:matcher].env[-1]
+          value: |
+            name: ROX_CONTINUOUS_PROFILING_SERVER_ADDRESS
+            value: "http://rhacs-pyroscope-internal.rhacs-observability.svc.cluster.local:4040"
+
+        - path: spec.template.spec.containers[name:matcher].env[-1]
+          value: |
+            name: ROX_CONTINUOUS_PROFILING_LABELS
+            value: "tenant_id={{ .Values.instanceId }},org_name={{ .Values.organizationName | replace "," "" }},rollout_group={{ .Values.rolloutGroup }}"
+
+        - path: spec.template.spec.containers[name:matcher].env[-1]
+          value: |
+            name: ROX_CONTINUOUS_PROFILING_APP_NAME
+            value: "scanner-v4-matcher"
+
+        {{- with .Values.scannerV4IndexerAffinity }}
+        # Apply custom affinity to scanner-v4-matcher
+        - path: spec.template.spec.affinity
+          value: |{{ . | toYaml | nindent 12 }}
+        {{- end }}
+
+        {{- with .Values.scannerV4MatcherPriority }}
+        # Apply custom priority class to scanner
+        - path: spec.template.spec.priorityClassName
+          value: '"{{ $.Release.Namespace }}-scanner-v4-matcher-{{ . }}"'
+        {{- end }}
+
+        # TODO(ROX-33481): Delete when the issue is fixed in the ACS Operator
+        - path: spec.template.metadata.annotations.openshift\.io/required-scc
+          value: restricted-v2
+
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: scanner-v4-db
+      patches:
+
+        # Remove scanner-v4-db cpu limits
+        - path: spec.template.spec.containers[name:db].resources.limits.cpu
+          value: null
+        - path: spec.template.spec.containers[name:cert-watcher].resources.limits.cpu
+          value: null
+        - path: spec.template.spec.initContainers[name:init-db].resources.limits.cpu
+          value: null
+
+        {{- with .Values.scannerV4IndexerAffinity }}
+        # Apply custom affinity to scanner-v4-db
+        - path: spec.template.spec.affinity
+          value: |{{ . | toYaml | nindent 12 }}
+        {{- end }}
+
+        {{- with .Values.scannerV4DbPriority }}
+        # Apply custom priority class to scanner
+        - path: spec.template.spec.priorityClassName
+          value: '"{{ $.Release.Namespace }}-scanner-v4-db-{{ . }}"'
+        {{- end }}
+
+        # TODO(ROX-33481): Delete when the issue is fixed in the ACS Operator
+        - path: spec.template.metadata.annotations.openshift\.io/required-scc
+          value: nonroot-v2
+
+    {{ end }}

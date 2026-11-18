@@ -1,0 +1,451 @@
+suite: declarative-config
+templates:
+  - templates/declarative-config.yaml
+
+tests:
+  - it: should not render when declarativeConfig is disabled
+    set:
+      declarativeConfig.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  # --- ExternalSecret: basic ---
+
+  - it: should render an ExternalSecret with correct target name
+    set:
+      declarativeConfig.enabled: true
+    asserts:
+      - isKind:
+          of: ExternalSecret
+      - equal:
+          path: metadata.name
+          value: cloud-service-sensible-declarative-configs
+      - equal:
+          path: spec.target.name
+          value: cloud-service-sensible-declarative-configs
+      - equal:
+          path: spec.target.template.type
+          value: Opaque
+      - equal:
+          path: spec.secretStoreRef.name
+          value: secret-store-kubernetes
+
+  # --- Audit logging ---
+
+  - it: should include audit log notifier when auditLogging is enabled
+    set:
+      declarativeConfig.enabled: true
+      declarativeConfig.auditLogging.enabled: true
+      declarativeConfig.auditLogging.endpoint: https://audit-logs.example.com:8888
+      declarativeConfig.auditLogging.skipTLSVerify: false
+    asserts:
+      - exists:
+          path: spec.target.template.data["com.redhat.rhacs.auditLogNotifier"]
+      - matchRegex:
+          path: spec.target.template.data["com.redhat.rhacs.auditLogNotifier"]
+          pattern: "name: Platform Audit Logs"
+      - matchRegex:
+          path: spec.target.template.data["com.redhat.rhacs.auditLogNotifier"]
+          pattern: "endpoint: https://audit-logs.example.com:8888"
+      - matchRegex:
+          path: spec.target.template.data["com.redhat.rhacs.auditLogNotifier"]
+          pattern: "skipTLSVerify: false"
+      - matchRegex:
+          path: spec.target.template.data["com.redhat.rhacs.auditLogNotifier"]
+          pattern: "auditLoggingEnabled: true"
+
+  - it: should set audit log tenant_id to release namespace
+    release:
+      namespace: rhacs-test-tenant
+    set:
+      declarativeConfig.enabled: true
+      declarativeConfig.auditLogging.enabled: true
+    asserts:
+      - matchRegex:
+          path: spec.target.template.data["com.redhat.rhacs.auditLogNotifier"]
+          pattern: "value: rhacs-test-tenant"
+
+  - it: should not include audit log notifier when auditLogging is disabled
+    set:
+      declarativeConfig.enabled: true
+      declarativeConfig.auditLogging.enabled: false
+    asserts:
+      - notExists:
+          path: spec.target.template.data["com.redhat.rhacs.auditLogNotifier"]
+
+  # --- Auth provider: enabled/disabled ---
+
+  - it: should not include auth provider when defaultAuthProvider is disabled
+    set:
+      declarativeConfig.enabled: true
+      declarativeConfig.defaultAuthProvider.enabled: false
+    asserts:
+      - notExists:
+          path: spec.target.template.data["default-sso-auth-provider"]
+
+  - it: should include auth provider when defaultAuthProvider is enabled
+    set:
+      declarativeConfig.enabled: true
+      declarativeConfig.defaultAuthProvider.enabled: true
+      declarativeConfig.defaultAuthProvider.oidc.clientCredentialsSecret: my-creds # pragma: allowlist secret
+      centralUIHost: central.example.com
+    asserts:
+      - exists:
+          path: spec.target.template.data["default-sso-auth-provider"]
+
+  # --- Auth provider name resolution ---
+
+  - it: "should resolve provider name to 'Red Hat SSO' for production issuer"
+    set:
+      declarativeConfig.enabled: true
+      declarativeConfig.defaultAuthProvider.enabled: true
+      declarativeConfig.defaultAuthProvider.oidc.issuer: https://sso.redhat.com/auth/realms/redhat-external
+      declarativeConfig.defaultAuthProvider.oidc.clientCredentialsSecret: my-creds # pragma: allowlist secret
+      centralUIHost: central.example.com
+    asserts:
+      - matchRegex:
+          path: spec.target.template.data["default-sso-auth-provider"]
+          pattern: "(?m)^name: Red Hat SSO$"
+
+  - it: "should resolve provider name to 'Red Hat SSO (stage)' for stage issuer"
+    set:
+      declarativeConfig.enabled: true
+      declarativeConfig.defaultAuthProvider.enabled: true
+      declarativeConfig.defaultAuthProvider.oidc.issuer: https://sso.stage.redhat.com/auth/realms/redhat-external
+      declarativeConfig.defaultAuthProvider.oidc.clientCredentialsSecret: my-creds # pragma: allowlist secret
+      centralUIHost: central.example.com
+    asserts:
+      - matchRegex:
+          path: spec.target.template.data["default-sso-auth-provider"]
+          pattern: "(?m)^name: Red Hat SSO \\(stage\\)$"
+
+  - it: should resolve provider name to hostname for custom issuer
+    set:
+      declarativeConfig.enabled: true
+      declarativeConfig.defaultAuthProvider.enabled: true
+      declarativeConfig.defaultAuthProvider.oidc.issuer: https://custom-idp.example.com/auth
+      declarativeConfig.defaultAuthProvider.oidc.clientCredentialsSecret: my-creds # pragma: allowlist secret
+      centralUIHost: central.example.com
+    asserts:
+      - matchRegex:
+          path: spec.target.template.data["default-sso-auth-provider"]
+          pattern: "(?m)^name: custom-idp.example.com$"
+
+  - it: "should resolve provider name to 'SSO' for empty issuer"
+    set:
+      declarativeConfig.enabled: true
+      declarativeConfig.defaultAuthProvider.enabled: true
+      declarativeConfig.defaultAuthProvider.oidc.issuer: ""
+      declarativeConfig.defaultAuthProvider.oidc.clientCredentialsSecret: my-creds # pragma: allowlist secret
+      centralUIHost: central.example.com
+    asserts:
+      - matchRegex:
+          path: spec.target.template.data["default-sso-auth-provider"]
+          pattern: "(?m)^name: SSO$"
+
+  # --- Auth provider fields ---
+
+  - it: should set uiEndpoint from centralUIHost
+    set:
+      declarativeConfig.enabled: true
+      declarativeConfig.defaultAuthProvider.enabled: true
+      declarativeConfig.defaultAuthProvider.oidc.clientCredentialsSecret: my-creds # pragma: allowlist secret
+      centralUIHost: my-central.example.com
+    asserts:
+      - matchRegex:
+          path: spec.target.template.data["default-sso-auth-provider"]
+          pattern: "uiEndpoint: my-central.example.com"
+
+  - it: should set ownerUserId in groups
+    set:
+      declarativeConfig.enabled: true
+      declarativeConfig.defaultAuthProvider.enabled: true
+      declarativeConfig.defaultAuthProvider.ownerUserId: owner-123
+      declarativeConfig.defaultAuthProvider.oidc.clientCredentialsSecret: my-creds # pragma: allowlist secret
+      centralUIHost: central.example.com
+    asserts:
+      - matchRegex:
+          path: spec.target.template.data["default-sso-auth-provider"]
+          pattern: "key: userid\n    value: \"owner-123\"\n    role: Admin"
+
+  - it: should set organizationId in requiredAttributes
+    set:
+      declarativeConfig.enabled: true
+      declarativeConfig.defaultAuthProvider.enabled: true
+      declarativeConfig.defaultAuthProvider.oidc.clientCredentialsSecret: my-creds # pragma: allowlist secret
+      centralUIHost: central.example.com
+      organizationId: org-456
+    asserts:
+      - matchRegex:
+          path: spec.target.template.data["default-sso-auth-provider"]
+          pattern: "key: rh_org_id\n    value: \"org-456\""
+
+  - it: should set OIDC configuration with ESO template variables
+    set:
+      declarativeConfig.enabled: true
+      declarativeConfig.defaultAuthProvider.enabled: true
+      declarativeConfig.defaultAuthProvider.oidc.issuer: https://sso.redhat.com/auth/realms/redhat-external
+      declarativeConfig.defaultAuthProvider.oidc.clientCredentialsSecret: my-oidc-creds # pragma: allowlist secret
+      centralUIHost: central.example.com
+    asserts:
+      - matchRegex:
+          path: spec.target.template.data["default-sso-auth-provider"]
+          pattern: "issuer: https://sso.redhat.com/auth/realms/redhat-external"
+      - matchRegex:
+          path: spec.target.template.data["default-sso-auth-provider"]
+          pattern: "clientID: \\{\\{ .defaultClientID \\}\\}"
+      - matchRegex:
+          path: spec.target.template.data["default-sso-auth-provider"]
+          pattern: "clientSecret: \\{\\{ .defaultClientSecret \\}\\}"
+      - matchRegex:
+          path: spec.target.template.data["default-sso-auth-provider"]
+          pattern: "mode: post"
+      - matchRegex:
+          path: spec.target.template.data["default-sso-auth-provider"]
+          pattern: "disableOfflineAccessScope: true"
+
+  - it: should reference correct external secret in data section
+    set:
+      declarativeConfig.enabled: true
+      declarativeConfig.defaultAuthProvider.enabled: true
+      declarativeConfig.defaultAuthProvider.oidc.clientCredentialsSecret: my-oidc-creds # pragma: allowlist secret
+      centralUIHost: central.example.com
+    asserts:
+      - contains:
+          path: spec.data
+          content:
+            secretKey: defaultClientID # pragma: allowlist secret
+            remoteRef:
+              key: my-oidc-creds
+              property: clientID
+      - contains:
+          path: spec.data
+          content:
+            secretKey: defaultClientSecret # pragma: allowlist secret
+            remoteRef:
+              key: my-oidc-creds
+              property: clientSecret
+
+  # --- ownerAlternateUserId ---
+
+  - it: should include alternate user group when ownerAlternateUserId is set
+    set:
+      declarativeConfig.enabled: true
+      declarativeConfig.defaultAuthProvider.enabled: true
+      declarativeConfig.defaultAuthProvider.ownerUserId: owner-123
+      declarativeConfig.defaultAuthProvider.ownerAlternateUserId: alt-owner-456
+      declarativeConfig.defaultAuthProvider.oidc.clientCredentialsSecret: my-creds # pragma: allowlist secret
+      centralUIHost: central.example.com
+    asserts:
+      - matchRegex:
+          path: spec.target.template.data["default-sso-auth-provider"]
+          pattern: "key: userid\n    value: \"alt-owner-456\"\n    role: Admin"
+
+  - it: should not include alternate user group when ownerAlternateUserId is empty
+    set:
+      declarativeConfig.enabled: true
+      declarativeConfig.defaultAuthProvider.enabled: true
+      declarativeConfig.defaultAuthProvider.ownerUserId: owner-123
+      declarativeConfig.defaultAuthProvider.ownerAlternateUserId: ""
+      declarativeConfig.defaultAuthProvider.oidc.clientCredentialsSecret: my-creds # pragma: allowlist secret
+      centralUIHost: central.example.com
+    asserts:
+      - notMatchRegex:
+          path: spec.target.template.data["default-sso-auth-provider"]
+          pattern: "alt-owner"
+
+  # --- M2M auth provider ---
+
+  - it: should include m2m-auth-provider when defaultAuthProvider is enabled
+    set:
+      declarativeConfig.enabled: true
+      declarativeConfig.defaultAuthProvider.enabled: true
+      declarativeConfig.defaultAuthProvider.ownerUserId: owner-123
+      declarativeConfig.defaultAuthProvider.oidc.issuer: https://sso.redhat.com/auth/realms/redhat-external
+      declarativeConfig.defaultAuthProvider.oidc.clientCredentialsSecret: my-creds # pragma: allowlist secret
+      centralUIHost: central.example.com
+    asserts:
+      - exists:
+          path: spec.target.template.data["m2m-auth-provider"]
+      - matchRegex:
+          path: spec.target.template.data["m2m-auth-provider"]
+          pattern: "type: GENERIC"
+      - matchRegex:
+          path: spec.target.template.data["m2m-auth-provider"]
+          pattern: "tokenExpirationDuration: 1h"
+      - matchRegex:
+          path: spec.target.template.data["m2m-auth-provider"]
+          pattern: "issuer: https://sso.redhat.com/auth/realms/redhat-external"
+      - matchRegex:
+          path: spec.target.template.data["m2m-auth-provider"]
+          pattern: "key: sub\n    value: \"owner-123\"\n    role: Admin"
+
+  - it: should not include m2m-auth-provider when defaultAuthProvider is disabled
+    set:
+      declarativeConfig.enabled: true
+      declarativeConfig.defaultAuthProvider.enabled: false
+    asserts:
+      - notExists:
+          path: spec.target.template.data["m2m-auth-provider"]
+
+  - it: should use ownerUserId as m2m-auth-provider sub claim value
+    set:
+      declarativeConfig.enabled: true
+      declarativeConfig.defaultAuthProvider.enabled: true
+      declarativeConfig.defaultAuthProvider.ownerUserId: service-account-xyz
+      declarativeConfig.defaultAuthProvider.oidc.issuer: https://sso.stage.redhat.com/auth/realms/redhat-external
+      declarativeConfig.defaultAuthProvider.oidc.clientCredentialsSecret: my-creds # pragma: allowlist secret
+      centralUIHost: central.example.com
+    asserts:
+      - matchRegex:
+          path: spec.target.template.data["m2m-auth-provider"]
+          pattern: "value: \"service-account-xyz\""
+      - matchRegex:
+          path: spec.target.template.data["m2m-auth-provider"]
+          pattern: "issuer: https://sso.stage.redhat.com/auth/realms/redhat-external"
+
+  # --- Additional auth provider ---
+
+  - it: should not render additional auth provider when name is empty
+    set:
+      declarativeConfig.enabled: true
+      declarativeConfig.additionalAuthProvider.name: ""
+    asserts:
+      - notExists:
+          path: spec.target.template.data["additional-auth-provider"]
+
+  - it: should render additional auth provider when name is set
+    set:
+      declarativeConfig.enabled: true
+      declarativeConfig.additionalAuthProvider.name: Custom IDP
+      centralUIHost: central.example.com
+    asserts:
+      - exists:
+          path: spec.target.template.data["additional-auth-provider"]
+      - matchRegex:
+          path: spec.target.template.data["additional-auth-provider"]
+          pattern: "(?m)^name: Custom IDP$"
+      - matchRegex:
+          path: spec.target.template.data["additional-auth-provider"]
+          pattern: "uiEndpoint: central.example.com"
+      - matchRegex:
+          path: spec.target.template.data["additional-auth-provider"]
+          pattern: "localhost:8443"
+
+  - it: should render additional auth provider OIDC configuration with ESO template variables
+    set:
+      declarativeConfig.enabled: true
+      declarativeConfig.additionalAuthProvider.name: Custom IDP
+      declarativeConfig.defaultAuthProvider.oidc.issuer: https://sso.redhat.com/auth/realms/redhat-external
+      centralUIHost: central.example.com
+    asserts:
+      - matchRegex:
+          path: spec.target.template.data["additional-auth-provider"]
+          pattern: "issuer: https://sso.redhat.com/auth/realms/redhat-external"
+      - matchRegex:
+          path: spec.target.template.data["additional-auth-provider"]
+          pattern: "mode: post"
+      - matchRegex:
+          path: spec.target.template.data["additional-auth-provider"]
+          pattern: "clientID: \\{\\{ .defaultClientID \\}\\}"
+      - matchRegex:
+          path: spec.target.template.data["additional-auth-provider"]
+          pattern: "clientSecret: \\{\\{ .defaultClientSecret \\}\\}"
+      - matchRegex:
+          path: spec.target.template.data["additional-auth-provider"]
+          pattern: "disableOfflineAccessScope: true"
+
+  - it: should render additional auth provider groups
+    set:
+      declarativeConfig.enabled: true
+      declarativeConfig.additionalAuthProvider.name: Custom IDP
+      declarativeConfig.additionalAuthProvider.groups:
+        - key: email
+          value: admin@example.com
+          role: Admin
+        - key: groups
+          value: developers
+          role: Analyst
+      centralUIHost: central.example.com
+    asserts:
+      - matchRegex:
+          path: spec.target.template.data["additional-auth-provider"]
+          pattern: "key: email\n    value: admin@example.com\n    role: Admin"
+      - matchRegex:
+          path: spec.target.template.data["additional-auth-provider"]
+          pattern: "key: groups\n    value: developers\n    role: Analyst"
+
+  - it: should render additional auth provider required attributes
+    set:
+      declarativeConfig.enabled: true
+      declarativeConfig.additionalAuthProvider.name: Custom IDP
+      declarativeConfig.additionalAuthProvider.requiredAttributes:
+        - key: org_id
+          value: "12345"
+        - key: is_internal
+          value: "true"
+      centralUIHost: central.example.com
+    asserts:
+      - matchRegex:
+          path: spec.target.template.data["additional-auth-provider"]
+          pattern: "key: org_id\n    value: 12345"
+      - matchRegex:
+          path: spec.target.template.data["additional-auth-provider"]
+          pattern: "key: is_internal\n    value: true"
+
+  - it: should render additional auth provider claim mappings
+    set:
+      declarativeConfig.enabled: true
+      declarativeConfig.additionalAuthProvider.name: Custom IDP
+      declarativeConfig.additionalAuthProvider.claimMappings:
+        - path: email
+          name: userid
+        - path: realm_access.roles
+          name: groups
+      centralUIHost: central.example.com
+    asserts:
+      - matchRegex:
+          path: spec.target.template.data["additional-auth-provider"]
+          pattern: "path: email\n    name: userid"
+      - matchRegex:
+          path: spec.target.template.data["additional-auth-provider"]
+          pattern: "path: realm_access.roles\n    name: groups"
+
+  - it: should render empty lists when no groups, attributes, or mappings
+    set:
+      declarativeConfig.enabled: true
+      declarativeConfig.additionalAuthProvider.name: Minimal IDP
+      declarativeConfig.additionalAuthProvider.groups: []
+      declarativeConfig.additionalAuthProvider.requiredAttributes: []
+      declarativeConfig.additionalAuthProvider.claimMappings: []
+      centralUIHost: central.example.com
+    asserts:
+      - exists:
+          path: spec.target.template.data["additional-auth-provider"]
+      - matchRegex:
+          path: spec.target.template.data["additional-auth-provider"]
+          pattern: "(?m)^name: Minimal IDP$"
+      - notMatchRegex:
+          path: spec.target.template.data["additional-auth-provider"]
+          pattern: "- key:"
+      - notMatchRegex:
+          path: spec.target.template.data["additional-auth-provider"]
+          pattern: "- path:"
+
+  - it: should not render additional auth provider when declarativeConfig is disabled
+    set:
+      declarativeConfig.enabled: false
+      declarativeConfig.additionalAuthProvider.name: Custom IDP
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not include data section when no auth providers are configured
+    set:
+      declarativeConfig.enabled: true
+      declarativeConfig.defaultAuthProvider.enabled: false
+      declarativeConfig.additionalAuthProvider.name: ""
+    asserts:
+      - notExists:
+          path: spec.data

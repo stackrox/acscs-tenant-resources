@@ -1,0 +1,7 @@
+---
+extends: default
+ignore: |
+  templates/*.yaml
+rules:
+  line-length:
+    max: 120

@@ -1,0 +1,85 @@
+{{ if and (.Capabilities.APIVersions.Has "monitoring.rhobs/v1") .Values.centralHealthcheckEnabled -}}
+apiVersion: monitoring.rhobs/v1
+kind: ServiceMonitor
+metadata:
+  name: central-route-monitor
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: rhacs
+spec:
+  endpoints:
+    {{- if .Values.centralUIHost }}
+    - interval: 1m
+      params:
+        module:
+          - http_2xx
+        target:
+          - "https://{{ .Values.centralUIHost }}/v1/ping"
+      path: /probe
+      port: blackbox
+      scheme: http
+      scrapeTimeout: 15s
+      metricRelabelings:
+        - sourceLabels:
+            - __address__
+          targetLabel: __param_target
+        - sourceLabels:
+            - __param_target
+          targetLabel: instance
+        - replacement: "https://{{ .Values.centralUIHost }}/v1/ping"
+          targetLabel: target
+        - targetLabel: rhacs_instance_id
+          replacement: {{ .Values.instanceId }}
+        - targetLabel: namespace
+          replacement: {{ .Release.Namespace }}
+        - targetLabel: app
+          replacement: rhacs
+        - targetLabel: endpoint
+          replacement: central-ui
+    {{- end }}
+    {{- if .Values.centralDataHost }}
+    - interval: 1m
+      params:
+        module:
+          # We skip TLS check for the following reasons:
+          # 1. Central CA certificate can only be configured in blackbox-exporter at the application level.
+          # To do this, we need to either dynamically update the blackbox-exporter configuration file or
+          # create an instance of blackbox-exporter for each tenant. Both options seem excessive for our needs.
+          # 2. Sensor has its own TLS verifier, and its logic cannot be reproduced in blackbox-exporter. Therefore,
+          # we need to implement our own health checker (in fleetshard-sync, for example) for this purpose,
+          # which also seems redundant.
+          #
+          # Central certificate expiration is monitored separately, and we consider this to be sufficient for the
+          # TLS cert monitoring.
+          - http_skip_tls_verify
+        target:
+          - "https://{{ .Values.centralDataHost }}/v1/ping"
+      path: /probe
+      port: blackbox
+      scheme: http
+      scrapeTimeout: 15s
+      metricRelabelings:
+        - sourceLabels:
+            - __address__
+          targetLabel: __param_target
+        - sourceLabels:
+            - __param_target
+          targetLabel: instance
+        - replacement: "https://{{ .Values.centralDataHost }}/v1/ping"
+          targetLabel: target
+        - targetLabel: rhacs_instance_id
+          replacement: {{ .Values.instanceId }}
+        - targetLabel: namespace
+          replacement: {{ .Release.Namespace }}
+        - targetLabel: app
+          replacement: rhacs
+        - targetLabel: endpoint
+          replacement: central-data
+    {{- end }}
+  namespaceSelector:
+    matchNames:
+      - rhacs-observability
+  selector:
+    matchLabels:
+      app: prometheus
+{{- end }}

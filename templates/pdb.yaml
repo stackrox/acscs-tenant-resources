@@ -1,0 +1,58 @@
+{{ if .Values.podDisruptionBudgetsEnabled }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: central
+spec:
+  minAvailable: 0
+  selector:
+    matchLabels:
+      app: central
+  unhealthyPodEvictionPolicy: AlwaysAllow
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: central-db
+spec:
+  minAvailable: 0
+  selector:
+    matchLabels:
+      app: central-db
+  unhealthyPodEvictionPolicy: AlwaysAllow
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: scanner-v4-indexer
+spec:
+  minAvailable: 0
+  selector:
+    matchLabels:
+      app: scanner-v4-indexer
+  unhealthyPodEvictionPolicy: AlwaysAllow
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: scanner-v4-matcher
+spec:
+  minAvailable: 0
+  selector:
+    matchLabels:
+      app: scanner-v4-matcher
+  unhealthyPodEvictionPolicy: AlwaysAllow
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: scanner-v4-db
+spec:
+  minAvailable: 0
+  selector:
+    matchLabels:
+      app: scanner-v4-db
+  unhealthyPodEvictionPolicy: AlwaysAllow
+---
+{{ end }}

@@ -1,0 +1,120 @@
+{{- if .Values.declarativeConfig.enabled }}
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: cloud-service-sensible-declarative-configs
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "tenant-resources.labels" . | nindent 4 }}
+  annotations: {{- include "tenant-resources.annotations" . | nindent 4 }}
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: secret-store-kubernetes
+    kind: SecretStore
+  target:
+    name: cloud-service-sensible-declarative-configs
+    template:
+      type: Opaque
+      data:
+        {{- if .Values.declarativeConfig.auditLogging.enabled }}
+        com.redhat.rhacs.auditLogNotifier: |
+          name: Platform Audit Logs
+          generic:
+            endpoint: {{ .Values.declarativeConfig.auditLogging.endpoint }}
+            skipTLSVerify: {{ .Values.declarativeConfig.auditLogging.skipTLSVerify }}
+            extraFields:
+              - key: tenant_id
+                value: {{ .Release.Namespace }}
+            auditLoggingEnabled: true
+        {{- end }}
+        {{- if .Values.declarativeConfig.defaultAuthProvider.enabled }}
+        default-sso-auth-provider: |
+          name: {{ include "tenant-resources.authProviderName" . }}
+          uiEndpoint: {{ .Values.centralUIHost }}
+          extraUIEndpoints:
+            - localhost:8443
+          groups:
+            - key: userid
+              value: {{ .Values.declarativeConfig.defaultAuthProvider.ownerUserId | quote }}
+              role: Admin
+            - key: groups
+              value: admin:org:all
+              role: Admin
+            - key: rh_is_org_admin
+              value: "true"
+              role: Admin
+            {{- if .Values.declarativeConfig.defaultAuthProvider.ownerAlternateUserId }}
+            - key: userid
+              value: {{ .Values.declarativeConfig.defaultAuthProvider.ownerAlternateUserId | quote }}
+              role: Admin
+            {{- end }}
+          requiredAttributes:
+            - key: rh_org_id
+              value: {{ .Values.organizationId | quote }}
+          claimMappings:
+            - path: realm_access.roles
+              name: groups
+            - path: org_id
+              name: rh_org_id
+            - path: is_org_admin
+              name: rh_is_org_admin
+            - path: deprecated_sub
+              name: userid
+          oidc:
+            issuer: {{ .Values.declarativeConfig.defaultAuthProvider.oidc.issuer }}
+            mode: post
+            clientID: {{ `{{ .defaultClientID }}` }}
+            clientSecret: {{ `{{ .defaultClientSecret }}` }}
+            disableOfflineAccessScope: true
+        m2m-auth-provider: |
+          type: GENERIC
+          tokenExpirationDuration: 1h
+          issuer: {{ .Values.declarativeConfig.defaultAuthProvider.oidc.issuer }}
+          mappings:
+            - key: sub
+              value: {{ .Values.declarativeConfig.defaultAuthProvider.ownerUserId | quote }}
+              role: Admin
+        {{- end }}
+        {{- if .Values.declarativeConfig.additionalAuthProvider.name }}
+        additional-auth-provider: |
+          name: {{ .Values.declarativeConfig.additionalAuthProvider.name }}
+          uiEndpoint: {{ .Values.centralUIHost }}
+          extraUIEndpoints:
+            - localhost:8443
+          groups:
+            {{- range .Values.declarativeConfig.additionalAuthProvider.groups }}
+            - key: {{ .key }}
+              value: {{ .value }}
+              role: {{ .role }}
+            {{- end }}
+          requiredAttributes:
+            {{- range .Values.declarativeConfig.additionalAuthProvider.requiredAttributes }}
+            - key: {{ .key }}
+              value: {{ .value }}
+            {{- end }}
+          claimMappings:
+            {{- range .Values.declarativeConfig.additionalAuthProvider.claimMappings }}
+            - path: {{ .path }}
+              name: {{ .name }}
+            {{- end }}
+          oidc:
+            issuer: {{ .Values.declarativeConfig.defaultAuthProvider.oidc.issuer }}
+            mode: post
+            clientID: {{ `{{ .defaultClientID }}` }}
+            clientSecret: {{ `{{ .defaultClientSecret }}` }}
+            disableOfflineAccessScope: true
+        {{- end }}
+  {{- if or .Values.declarativeConfig.defaultAuthProvider.enabled .Values.declarativeConfig.additionalAuthProvider.name }}
+  data:
+    {{- if .Values.declarativeConfig.defaultAuthProvider.enabled }}
+    - secretKey: defaultClientID # pragma: allowlist secret
+      remoteRef:
+        key: {{ .Values.declarativeConfig.defaultAuthProvider.oidc.clientCredentialsSecret }}
+        property: clientID
+    - secretKey: defaultClientSecret # pragma: allowlist secret
+      remoteRef:
+        key: {{ .Values.declarativeConfig.defaultAuthProvider.oidc.clientCredentialsSecret }}
+        property: clientSecret # pragma: allowlist secret
+    {{- end }}
+  {{- end }}
+{{- end }}

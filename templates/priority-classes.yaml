@@ -1,0 +1,49 @@
+{{ if .Values.centralPriority }}
+---
+kind: PriorityClass
+apiVersion: scheduling.k8s.io/v1
+metadata:
+  name: "{{.Release.Namespace}}-central-{{.Values.centralPriority}}"
+value: {{.Values.centralPriority}}
+description: "{{.Release.Namespace}} Central Priority"
+{{- end}}
+
+{{ if .Values.centralDbPriority }}
+---
+kind: PriorityClass
+apiVersion: scheduling.k8s.io/v1
+metadata:
+  name: "{{.Release.Namespace}}-central-db-{{.Values.centralDbPriority}}"
+value: {{.Values.centralDbPriority}}
+description: "{{.Release.Namespace}} Central DB Priority"
+{{- end}}
+
+{{ if .Values.scannerV4IndexerPriority }}
+---
+kind: PriorityClass
+apiVersion: scheduling.k8s.io/v1
+metadata:
+  name: "{{.Release.Namespace}}-scanner-v4-indexer-{{.Values.scannerV4IndexerPriority}}"
+value: {{.Values.scannerV4IndexerPriority}}
+description: "{{.Release.Namespace}} Scanner V4 Indexer Priority"
+{{- end}}
+
+{{ if .Values.scannerV4MatcherPriority }}
+---
+kind: PriorityClass
+apiVersion: scheduling.k8s.io/v1
+metadata:
+  name: "{{.Release.Namespace}}-scanner-v4-matcher-{{.Values.scannerV4MatcherPriority}}"
+value: {{.Values.scannerV4MatcherPriority}}
+description: "{{.Release.Namespace}} Scanner V4 Matcher Priority"
+{{- end}}
+
+{{ if .Values.scannerV4DbPriority }}
+---
+kind: PriorityClass
+apiVersion: scheduling.k8s.io/v1
+metadata:
+  name: {{.Release.Namespace}}-scanner-v4-db-{{.Values.scannerV4DbPriority}}
+value: {{.Values.scannerV4DbPriority}}
+description: "{{.Release.Namespace}} Scanner V4 DB Priority"
+{{- end}}
