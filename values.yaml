@@ -70,6 +70,46 @@ centralDbAffinity: {}
 centralDbPriority: 0
 centralDbVolumeSize: 10Gi # Used when external DB is disabled, i.e. in non-prod environments.
 
+scannerGomemlimitPercentage: 90 # GOMEMLIMIT as percentage of memory limit
+scannerResources: # Scanner resources
+  limits:
+    memory: 2816Mi
+  requests:
+    cpu: 30m
+    memory: 2816Mi
+scannerTolerations:
+  - key: "node.kubernetes.io/not-ready"
+    operator: "Exists"
+    effect: "NoExecute"
+    tolerationSeconds: 60
+  - key: "node.kubernetes.io/unreachable"
+    operator: "Exists"
+    effect: "NoExecute"
+    tolerationSeconds: 60
+scannerNodeSelector: {}
+scannerAffinity: {}
+scannerPriority: 0
+
+scannerDbResources: # Scanner db resources
+  limits:
+    memory: 1.2G
+  requests:
+    cpu: 100m
+    memory: 1.2G
+scannerDbTolerations:
+  - key: "node.kubernetes.io/not-ready"
+    operator: "Exists"
+    effect: "NoExecute"
+    tolerationSeconds: 60
+  - key: "node.kubernetes.io/unreachable"
+    operator: "Exists"
+    effect: "NoExecute"
+    tolerationSeconds: 60
+scannerDbNodeSelector: {}
+scannerDbAffinity: {}
+scannerDbPriority: 0
+scannerDbVolumeSize: "11Gi"
+
 scannerV4Enabled: false # Scanner V4 enabled
 
 scannerV4IndexerGomemlimitPercentage: 90 # GOMEMLIMIT as percentage of memory limit
@@ -170,7 +210,7 @@ centralVpaResourcePolicy:   # Central VPA resource policy
         cpu: "1.5"
         memory: "18Gi"
 
-# Environment variable customizations for all the pods managed by Central CR in format:
+# Environment variable customizations for all the pods managed by Central CR (central, scanner, scanner-db) in format:
 # centralCustomizeEnvVars:
 #   - name: ROX_POSTGRES_DEFAULT_PRUNING_TIMEOUT
 #     value: 10m

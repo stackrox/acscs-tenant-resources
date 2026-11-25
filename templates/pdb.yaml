@@ -25,6 +25,28 @@ spec:
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
+  name: scanner
+spec:
+  minAvailable: 0
+  selector:
+    matchLabels:
+      app: scanner
+  unhealthyPodEvictionPolicy: AlwaysAllow
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: scanner-db
+spec:
+  minAvailable: 0
+  selector:
+    matchLabels:
+      app: scanner-db
+  unhealthyPodEvictionPolicy: AlwaysAllow
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
   name: scanner-v4-indexer
 spec:
   minAvailable: 0

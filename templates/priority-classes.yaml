@@ -18,6 +18,27 @@ value: {{.Values.centralDbPriority}}
 description: "{{.Release.Namespace}} Central DB Priority"
 {{- end}}
 
+
+{{ if .Values.scannerPriority }}
+---
+kind: PriorityClass
+apiVersion: scheduling.k8s.io/v1
+metadata:
+  name: "{{.Release.Namespace}}-scanner-{{.Values.scannerPriority}}"
+value: {{.Values.scannerPriority}}
+description: "{{.Release.Namespace}} Scanner Priority"
+{{- end}}
+
+{{ if .Values.scannerDbPriority }}
+---
+kind: PriorityClass
+apiVersion: scheduling.k8s.io/v1
+metadata:
+  name: "{{.Release.Namespace}}-scanner-db-{{.Values.scannerDbPriority}}"
+value: {{.Values.scannerDbPriority}}
+description: "{{.Release.Namespace}} Scanner DB Priority"
+{{- end}}
+
 {{ if .Values.scannerV4IndexerPriority }}
 ---
 kind: PriorityClass

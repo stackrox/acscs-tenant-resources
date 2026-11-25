@@ -35,5 +35,8 @@ subjects:
     name: central
     namespace: {{.Release.Namespace}}
   - kind: ServiceAccount
+    name: scanner
+    namespace: {{ .Release.Namespace }}
+  - kind: ServiceAccount
     name: scanner-v4
     namespace: {{ .Release.Namespace }}

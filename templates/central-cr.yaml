@@ -93,6 +93,34 @@ spec:
   network:
     policies: Disabled
 
+  scanner:
+    analyzer:
+      resources: {{ .Values.scannerResources | toYaml | nindent 8 }}
+      {{- with .Values.scannerNodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.scannerTolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      scaling:
+        autoScaling: Disabled
+        replicas: 1
+    db:
+      resources: {{ .Values.scannerDbResources | toYaml | nindent 8 }}
+      {{- with .Values.scannerDbNodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.scannerDbTolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    monitoring:
+      exposeEndpoint: Enabled
+    scannerComponent: Enabled
+
   scannerV4:
     db:
       resources: {{ .Values.scannerV4DbResources | toYaml | nindent 8 }}
@@ -204,6 +232,83 @@ spec:
         # TODO(ROX-33481): Delete when the issue is fixed in the ACS Operator
         - path: spec.template.metadata.annotations.openshift\.io/required-scc
           value: nonroot-v2
+
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: scanner
+      patches:
+
+        # Remove scanner cpu limits
+        - path: spec.template.spec.containers[name:scanner].resources.limits.cpu
+          value: null
+
+        # Add GOMEMLIMIT env variable to the scanner container.
+        # This setting takes precedence over ROX_MEMLIMIT, which by default equals the container limit.
+        - path: spec.template.spec.containers[name:scanner].env[-1]
+          value: |
+            name: GOMEMLIMIT
+            value: {{ include "tenant-resources.gomemlimit" (dict "memory" .Values.scannerResources.limits.memory "percentage" .Values.scannerGomemlimitPercentage) | quote }}
+
+        # Set allowPrivilegeEscalation to false for scanner container.
+        - path: spec.template.spec.containers[name:scanner].securityContext.allowPrivilegeEscalation
+          value: "false"
+
+        {{- with .Values.scannerAffinity }}
+        # Apply custom affinity to scanner
+        - path: spec.template.spec.affinity
+          value: |{{ . | toYaml | nindent 12 }}
+        {{- end }}
+
+        {{- with .Values.scannerPriority }}
+        # Apply custom priority class to scanner
+        - path: spec.template.spec.priorityClassName
+          value: '"{{ $.Release.Namespace }}-scanner-{{ . }}"'
+        {{- end }}
+
+        # TODO(ROX-33481): Delete when the issue is fixed in the ACS Operator
+        - path: spec.template.metadata.annotations.openshift\.io/required-scc
+          value: nonroot-v2
+
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: scanner-db
+      patches:
+
+        # Remove scanner-db cpu limits
+        - path: spec.template.spec.containers[name:db].resources.limits.cpu
+          value: null
+        - path: spec.template.spec.initContainers[name:init-db].resources.limits.cpu
+          value: null
+
+        # Patch scanner-db to use an ephemeral volume
+        - path: spec.template.spec.volumes[name:scanner-db-data]
+          value: |
+            name: scanner-db-data
+            ephemeral:
+              volumeClaimTemplate:
+                spec:
+                  accessModes:
+                    - ReadWriteOnce
+                  resources:
+                    requests:
+                      storage: {{ .Values.scannerDbVolumeSize | quote }}
+
+        {{- with .Values.scannerDbAffinity }}
+        # Apply custom affinity to scanner-db
+        - path: spec.template.spec.affinity
+          value: |{{ . | toYaml | nindent 12 }}
+        {{- end }}
+
+        {{- with .Values.scannerDbPriority }}
+        # Apply custom priority class to scanner
+        - path: spec.template.spec.priorityClassName
+          value: '"{{ $.Release.Namespace }}-scanner-db-{{ . }}"'
+        {{- end }}
+
+        # TODO(ROX-33481): Delete when the issue is fixed in the ACS Operator
+        - path: spec.template.metadata.annotations.openshift\.io/required-scc
+          value: nonroot-v2
+
 
     {{ if .Values.scannerV4Enabled }}
 

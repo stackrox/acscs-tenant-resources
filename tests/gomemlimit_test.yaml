@@ -37,6 +37,22 @@ tests:
           path: spec.overlays[0].patches[1].value
           pattern: 'name: GOMEMLIMIT\nvalue: "1610612736"'
 
+  # --- Scanner GOMEMLIMIT ---
+
+  - it: should set scanner GOMEMLIMIT to 90% of memory limit by default
+    asserts:
+      - matchRegex:
+          path: spec.overlays[1].patches[1].value
+          pattern: 'name: GOMEMLIMIT\nvalue: "2657511015"'
+
+  - it: should set scanner GOMEMLIMIT with custom percentage
+    set:
+      scannerGomemlimitPercentage: 80
+    asserts:
+      - matchRegex:
+          path: spec.overlays[1].patches[1].value
+          pattern: 'name: GOMEMLIMIT\nvalue: "2362232013"'
+
   # --- Scanner V4 Indexer GOMEMLIMIT ---
 
   - it: should set scanner-v4-indexer GOMEMLIMIT to 90% of memory limit by default
@@ -44,7 +60,7 @@ tests:
       scannerV4Enabled: true
     asserts:
       - matchRegex:
-          path: spec.overlays[1].patches[1].value
+          path: spec.overlays[3].patches[1].value
           pattern: 'name: GOMEMLIMIT\nvalue: "330301440"'
 
   - it: should set scanner-v4-indexer GOMEMLIMIT with custom percentage
@@ -53,7 +69,7 @@ tests:
       scannerV4IndexerGomemlimitPercentage: 80
     asserts:
       - matchRegex:
-          path: spec.overlays[1].patches[1].value
+          path: spec.overlays[3].patches[1].value
           pattern: 'name: GOMEMLIMIT\nvalue: "293601280"'
 
   # --- Scanner V4 Matcher GOMEMLIMIT ---
@@ -63,7 +79,7 @@ tests:
       scannerV4Enabled: true
     asserts:
       - matchRegex:
-          path: spec.overlays[2].patches[1].value
+          path: spec.overlays[4].patches[1].value
           pattern: 'name: GOMEMLIMIT\nvalue: "707788800"'
 
   - it: should set scanner-v4-matcher GOMEMLIMIT with custom percentage
@@ -72,5 +88,5 @@ tests:
       scannerV4MatcherGomemlimitPercentage: 80
     asserts:
       - matchRegex:
-          path: spec.overlays[2].patches[1].value
+          path: spec.overlays[4].patches[1].value
           pattern: 'name: GOMEMLIMIT\nvalue: "629145600"'
